@@ -1,32 +1,29 @@
-using FishNet.Object;
-using FishNet.Object.Synchronizing;
+
 using TMPro;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
-using UnityEngine.Rendering.Universal;
-using FishNet.Connection;
 
-public class PlayerController : NetworkBehaviour
+public class PlayerController : MonoBehaviour
 {
-    [SyncVar] private float _rigidbody2DX;
-    [SyncVar] private float _rigidbody2DY;
-    [SyncVar] private float _velocity;
-    [SerializeField] private Rigidbody2D _rb;
-    [SerializeField] private FixedJoystick _joystick;
-    [SerializeField] private EventTrigger _shootButton;
-    [SerializeField] private float _moveSpeed;
-    [SyncVar] public float Health = 1500;
-    [SyncVar] public float Armor = 0;
-    [SyncVar] public float MaxArmor = 1500;
-    [SyncVar] public float ReloadDelay = 0f;
-    [SyncVar] public Weapon Gun;
-    [SyncVar] public NetworkConnection PlayerConn;
+    private float _rigidbody2DX;
+    private float _rigidbody2DY;
+    private float _velocity;
+    public Rigidbody2D _rb;
+    private EventTrigger _shootButton;
+    private float _moveSpeed;
+    public float Health = 1500;
+    public float Armor = 0;
+    public float MaxArmor = 1500;
+    public float ReloadDelay = 0f;
+    public Weapon Gun;
     public float Spread;
     public float CharacterSpeedFirst;
     public float CharacterSpeed;
     private float _fireRateCooldown;
+
+    private float currentRotation = 0f;
     public GameObject Cam;
     public GameObject Hud;
     public GameObject FlashLight;
@@ -44,30 +41,12 @@ public class PlayerController : NetworkBehaviour
 
     private void Awake()
     {
-
+        Cursor.visible = false; 
+        Cursor.lockState = CursorLockMode.Locked;
         _rb = gameObject.GetComponent<Rigidbody2D>();
         _playerSource = GetComponent<AudioSource>();
     }
 
-    public override void OnStartClient()
-    {
-        base.OnStartClient();
-        if (!base.IsOwner)
-        {
-            PlayerConn = base.Owner;
-            DisablePlayerComponents();
-            return;
-        }
-
-        // Инициализация значений для владельца
-        CharacterSpeed = CharacterSpeedFirst;
-    }
-
-    public override void OnStartServer()
-    {
-        base.OnStartServer();
-        CharacterSpeed = CharacterSpeedFirst;
-    }
 
     private void DisablePlayerComponents()
     {
@@ -82,13 +61,10 @@ public class PlayerController : NetworkBehaviour
 
     private void Update()
     {
-        if (base.IsServer)
-        {
-            HandleDelay();
-            UpdateSpread();
 
-        }
-        if (!base.IsOwner) return;
+        HandleDelay();
+        UpdateSpread();
+
 
         HandleMovement();
 
@@ -102,15 +78,15 @@ public class PlayerController : NetworkBehaviour
         if (collision.tag == "Gun")
         {
             UnityAction TakeItemAction = collision.GetComponent<ItemBottom>().TakeItem;
-            TakeButton.GetComponent<UnityEngine.UI.Button>().onClick.AddListener(TakeItemAction);
-            TakeButton.SetActive(true);
+            //TakeButton.GetComponent<UnityEngine.UI.Button>().onClick.AddListener(TakeItemAction);
+            //TakeButton.SetActive(true);
             return;
         }
         else if (collision.tag == "Armor")
         {
             UnityAction TakeItemAction = collision.GetComponent<ArmorBottom>().TakeArmor;
-            TakeButton.GetComponent<UnityEngine.UI.Button>().onClick.AddListener(TakeItemAction);
-            TakeButton.SetActive(true);
+            //TakeButton.GetComponent<UnityEngine.UI.Button>().onClick.AddListener(TakeItemAction);
+            //TakeButton.SetActive(true);
             return;
         }
     }
@@ -119,21 +95,26 @@ public class PlayerController : NetworkBehaviour
     {
         if (collision.tag == "Gun")
         {
-            TakeButton.SetActive(false);
+            //TakeButton.SetActive(false);
         }
     }
 
     private void HandleMovement()
     {
-        Vector2 MoveDirection = new Vector2(_rigidbody2DY, _rigidbody2DX);
-        _rb.velocity = transform.TransformDirection(MoveDirection);
-
-        if (IsPC)
-            KeyboardInput();
-        else
-            JoystickInput();
-
+        KeyboardInput();
+        RotateToMouse();
     }
+
+    public void RotateToMouse()
+    {
+        float mouseX = Input.GetAxis("Mouse X");
+
+        currentRotation -= mouseX * 1;
+
+        transform.rotation = Quaternion.Euler(0f, 0f, currentRotation);
+    }
+
+
 
     private void KeyboardInput()
     {
@@ -145,19 +126,13 @@ public class PlayerController : NetworkBehaviour
         if (Input.GetKeyUp(KeyCode.H)) Suicide(this);
     }
 
-    [ServerRpc]
-    public void Move(float AxisY, float AxisX)
+    public void Move(float AxisX, float AxisY)
     {
-        if (AxisY != 0)
-            _rigidbody2DY = AxisY * CharacterSpeed * 0.7f;
+        Vector2 inputVector = new Vector2(AxisX, AxisY).normalized;
 
-        _rigidbody2DX = AxisX * CharacterSpeed;
-    }
+        Vector2 moveDirection = transform.right * inputVector.x + transform.up * inputVector.y;
 
-    private void JoystickInput()
-    {
-        if (!AllowMoving) return;
-        Move(_joystick.Horizontal, _joystick.Vertical);
+        _rb.velocity = moveDirection * CharacterSpeed;
     }
 
     private void UpdateHUD()
@@ -174,7 +149,6 @@ public class PlayerController : NetworkBehaviour
         _shooting = true;
     }
 
-    public void ShootUp() => _shooting = false;
 
     public void Reload()
     {
@@ -198,20 +172,17 @@ public class PlayerController : NetworkBehaviour
 
     // ------------------ RPC METHODS ------------------ \\
 
-    [Server]
     private void UpdateSpread()
     {
         float currentSpeed;
-        _rb.velocity = new Vector2(_rigidbody2DX, _rigidbody2DY);
 
         currentSpeed = _rb.velocity.magnitude;
         float speedPercent = currentSpeed / 8;
 
-        Spread = Mathf.Lerp(Gun.minSpread, Gun.spread, speedPercent);
+        //Spread = Mathf.Lerp(Gun.minSpread, Gun.spread, speedPercent);
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    public void ChangeWeaponParametersRpc(string gunName, int countBulletsInMagazine, int countBulletsInStock)
+    public void ChangeWeaponParameters(string gunName, int countBulletsInMagazine, int countBulletsInStock)
     {
         if (Gun.weaponName != null)
         {
@@ -222,33 +193,25 @@ public class PlayerController : NetworkBehaviour
         Gun.countBulletsInMagazine = countBulletsInMagazine;
         Gun.bulletsInStock = countBulletsInStock;
         UpdateGunVisuals(this, gunName);
-        //ChangeGunObserverRpc(damage, fireRate, distance, spread, armorPenetration, maxBulletsInMagazine, gunName);
     }
-
-    [Server]
+    
     public void SpawnGun()
     {
         _isReloading = false;
         Debug.Log(Gun.weaponName);
-        int countBulletsInMagazine = Gun.countBulletsInMagazine;
-        int countBulletsInStock = Gun.bulletsInStock;
-
-        GameObject myGun = Instantiate(Resources.Load<GameObject>("Prefabs/Guns/" + Gun.weaponName), transform.position, Quaternion.identity);
-        ServerManager.Spawn(myGun);
-        myGun.GetComponent<Weapon>().countBulletsInMagazine = countBulletsInMagazine;
-        myGun.GetComponent<Weapon>().bulletsInStock = countBulletsInStock;
+        GameObject myGun = Instantiate(Resources.Load<GameObject>("Guns/" + Gun.weaponName), transform.position, Quaternion.identity);
+        myGun.GetComponent<Weapon>().countBulletsInMagazine = Gun.countBulletsInMagazine;
+        myGun.GetComponent<Weapon>().bulletsInStock = Gun.bulletsInStock;
     }
 
 
-    [ObserversRpc]
     private void UpdateGunVisuals(PlayerController player, string gunName)
     {
-        player.GunObject.name = gunName;
-        player.GunObject.GetComponent<SpriteRenderer>().sprite = Resources.Load<Sprite>("Sprites/GunsTop/" + gunName);
-        player._playerSource.clip = Resources.Load<AudioClip>("Sounds/Gun/" + gunName);
+        //player.GunObject.name = gunName;
+        //player.GunObject.GetComponent<SpriteRenderer>().sprite = Resources.Load<Sprite>("Sprites/GunsTop/" + gunName);
+        //player._playerSource.clip = Resources.Load<AudioClip>("Sounds/Gun/" + gunName);
     }
-
-    [ServerRpc(RequireOwnership = false)]
+    
     public void TakeArmorRpc(PlayerController player)
     {
         if (player == null) return;
@@ -257,7 +220,6 @@ public class PlayerController : NetworkBehaviour
         TakeArmorObserverRpc(player);
     }
 
-    [ObserversRpc]
     private void TakeArmorObserverRpc(PlayerController player)
     {
         if (player == null) return;
@@ -265,7 +227,6 @@ public class PlayerController : NetworkBehaviour
         player.Armor = player.MaxArmor;
     }
 
-    [ServerRpc]
     private void CallReloadGunServerRpc()
     {
         if (Gun.bulletsInStock <= 0) return;
@@ -281,7 +242,6 @@ public class PlayerController : NetworkBehaviour
         StartCoroutine(CalculateReloadDelay(Gun.reloadDelay, ReloadGunServerRpc));
     }
 
-    [Server]
     private void ReloadGunServerRpc()
     {
         if (Gun.bulletsInStock > Gun.maxBulletsInMagazine - Gun.countBulletsInMagazine)
@@ -297,18 +257,11 @@ public class PlayerController : NetworkBehaviour
         _isReloading = false;
     }
 
-    [Server]
     public void HandleDelay()
     {
         _fireRateCooldown -= Time.deltaTime;
-
-        if (_fireRateCooldown <= 0)
-        {
-            HandleShooting();
-        }
     }
 
-    [ServerRpc]
     private void HandleShooting()
     {
         if (Gun == null || _fireRateCooldown > 0 || Gun.countBulletsInMagazine <= 0 || _isReloading) return;
@@ -318,7 +271,6 @@ public class PlayerController : NetworkBehaviour
         ShootServerRpc(Gun.damage, Gun.armorPenetration, ShootStartPoint.transform.position, transform.up, Spread);
     }
 
-    [Server]
     private void ShootServerRpc(float damage, float armorPenetration, Vector2 position, Vector2 direction, float bulletSpread)
     {
         if (_isReloading) return;
@@ -328,7 +280,6 @@ public class PlayerController : NetworkBehaviour
             float spreadAngle = Random.Range(-bulletSpread, bulletSpread);
             Vector2 spreadDirection = Quaternion.Euler(0, 0, spreadAngle) * direction;
 
-            // Игнорируем свой коллайдер
             RaycastHit2D hit = Physics2D.Raycast(position, spreadDirection, Gun.distance, 7);
 
             if (hit.collider != null)
@@ -344,13 +295,12 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-    [ServerRpc]
+
     public void Suicide(PlayerController target)
     {
         ApplyDamage(target, 99999999, 100);
     }
 
-    [Server]
     private void ApplyDamage(PlayerController target, float damage, float armorPenetration)
     {
         float damageToArmor = damage * (1 - armorPenetration / 100);
@@ -376,9 +326,7 @@ public class PlayerController : NetworkBehaviour
                 }
 
                 Death(target);
-                Despawn(target.gameObject);
                 GameObject Tombstone = Instantiate(Resources.Load<GameObject>("Prefabs/Death"), target.transform.position, Quaternion.identity);
-                target.Spawn(Tombstone);
             }
             return;
         }
@@ -396,13 +344,10 @@ public class PlayerController : NetworkBehaviour
             }
 
             Death(target);
-            Despawn(target.gameObject);
             GameObject Tombstone = Instantiate(Resources.Load<GameObject>("Prefabs/Death"), target.transform.position, Quaternion.identity);
-            target.Spawn(Tombstone);
         }
     }
 
-    [ObserversRpc]
     private void Death(PlayerController target)
     {
         if (!target.enabled) return;
@@ -414,11 +359,9 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-    [Server]
     private void SpawnBulletVisual(Vector2 startPosition, Vector2 direction)
     {
         GameObject bullet = Instantiate(RayVisualPrefab, startPosition, Quaternion.identity);
-        ServerManager.Spawn(bullet);
         bullet.GetComponent<BulletController>().Direction = direction;
         bullet.GetComponent<BulletController>().MaxDistance = Gun.distance;
         bullet.GetComponent<BulletController>().Push();
