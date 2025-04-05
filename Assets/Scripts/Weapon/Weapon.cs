@@ -15,10 +15,12 @@ public class Weapon : MonoBehaviour, IItem
     public int countBulletsInMagazine;
     public int countBulletsInShoot;
     public string weaponName;
+    public bool fist;
 
     public void Start()
     {
-        gameObject.name = weaponName;
+        if(gameObject.GetComponent<PlayerController>() == null && gameObject.GetComponent<EnemyController>() == null)
+            gameObject.name = weaponName;
 
         LoadWeaponDataFromDatabase(weaponName);
     }
@@ -34,8 +36,12 @@ public class Weapon : MonoBehaviour, IItem
         reloadDelay = weaponData.reloadDelay;
         armorPenetration = weaponData.armorPenetration;
         maxBulletsInMagazine = weaponData.maxBulletsInMagazine;
-        bulletsInStock = weaponData.bulletsInStock;
-        countBulletsInMagazine = weaponData.maxBulletsInMagazine;
+        if (bulletsInStock == 0)
+        {
+            bulletsInStock = weaponData.bulletsInStock;
+            countBulletsInMagazine = weaponData.maxBulletsInMagazine;
+        }
         countBulletsInShoot = weaponData.countBulletsInShoot;
+        fist = weaponData.fist;
     }
 }

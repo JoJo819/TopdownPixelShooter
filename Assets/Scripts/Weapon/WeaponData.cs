@@ -13,4 +13,5 @@ public class WeaponData : Item
     public int maxBulletsInMagazine;
     public int bulletsInStock;
     public int countBulletsInShoot;
+    public bool fist;
 }
